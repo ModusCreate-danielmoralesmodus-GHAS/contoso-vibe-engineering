@@ -50,7 +50,7 @@ jobs:
 
           # 4. Use the CLI with a direct file input if possible, or cat it correctly
           # 2>&1 | tee ensures we see the log even if it fails
-          copilot chat -f prompt.txt \
+          copilot chat prompt.txt \
             --allow-all-tools \
             --allow-all-paths 2>&1 | tee copilot_log.txt
       - name: Output security report as summary
