@@ -27,33 +27,29 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Clean the prompt (Remove Frontmatter)
-          CLEAN_PROMPT=$(sed -n '/^---$/ { :a; n; /^---$/! ba; n; }; p' .github/agents/security-reporter.agent.md)
+          # 1. Extraction Logic
+          # Use a more resilient extraction that doesn't rely on complex sed labels
+          awk '/^---$/{count++; next} count==2' .github/agents/security-reporter.agent.md > instructions.txt
 
-          # 2. Build the full prompt file
-          # We use a quoted 'EOF' to prevent Bash from mangling the markdown content
-          cat <<'EOF' > prompt.txt
-          $CLEAN_PROMPT
+          # 2. Append Context
+          echo -e "\nContext: - Repository: ${{ github.repository }}\nTask: Execute instructions and save to security-reports/security-assessment-report.md" >> instructions.txt
 
-          Context:
-          - Repository: $GITHUB_REPOSITORY
-
-          Task:
-          - Execute instructions on the full codebase
-          - Generate the security report at security-reports/security-assessment-report.md
-          EOF
-
-          # 3. Execute using standard input redirection
-          # In the 2026 CLI, the -p flag accepts the prompt string. 
-          # To pass a whole file, we pipe it or use the @ symbol.
-          copilot -p "$(cat prompt.txt)" \
+          # 3. Execution via Piping (Standard for 2026 CLI)
+          # We use "copilot chat" which is the modern entry point for agentic tasks
+          if ! cat instructions.txt | copilot chat \
             --allow-all-tools \
-            --allow-all-paths 2>&1 | tee copilot_log.txt
+            --allow-all-paths > copilot_log.txt 2>&1; then
+            
+            echo "❌ COPILOT EXECUTION FAILED"
+            echo "--- START OF LOG ---"
+            cat copilot_log.txt
+            echo "--- END OF LOG ---"
+            exit 1
+          fi
       - name: Output security report as summary
         if: always()
         run: |
