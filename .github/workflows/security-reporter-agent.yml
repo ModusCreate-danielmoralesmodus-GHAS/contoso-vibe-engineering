@@ -23,29 +23,26 @@ jobs:
       - name: Install GitHub Copilot CLI
         run: npm i -g @github/copilot
 
-      - name: Run Security Agent via Copilot CLI
+      - name: Run Security Agent via GH Copilot
         env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          # Use the standard GITHUB_TOKEN variable name as well
+          GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          
-          # 1. Create the directory first
           mkdir -p security-reports
+
+          # Install the Copilot extension for the GH CLI
+          gh extension install github/gh-copilot --force
 
           AGENT_PROMPT=$(cat .github/agents/security-reporter.agent.md)
           PROMPT="$AGENT_PROMPT"
-          PROMPT+=$'\n\nContext:\n'
-          PROMPT+="- Repository: $GITHUB_REPOSITORY"
-          PROMPT+=$'\n\nTask:\n'
-          PROMPT+=$"\n- Execute the instructions on the full codebase"
-          # 2. Changed to relative path: security-reports/...
-          PROMPT+=$'\n- Generate the security report at security-reports/security-assessment-report.md summarizing findings, severity, and remediation guidance.'
-          
-          # 3. Use the correct CLI command structure
-          # Some versions of the CLI use 'gh copilot' if installed as an extension, 
-          # but for the npm global install, ensure permissions are set.
-          copilot --prompt "$PROMPT" --allow-all-tools --allow-all-paths < /dev/null
+          PROMPT+=$'\n\nContext: Repository: '"$GITHUB_REPOSITORY"
+          PROMPT+=$'\n\nTask: Generate security report at security-reports/security-assessment-report.md'
+
+          # Use 'gh copilot explain' or 'gh copilot config' logic, 
+          # but specifically for the agentic flow:
+          gh copilot chat "$PROMPT" --allow-all-tools --allow-all-paths > /dev/null
 
       - name: Output security report as summary
         if: always()
