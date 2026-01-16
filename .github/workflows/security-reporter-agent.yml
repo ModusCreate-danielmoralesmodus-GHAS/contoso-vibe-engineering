@@ -31,11 +31,7 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Authenticate by piping the token and ensuring GH_TOKEN is NOT set in this specific sub-command
-          # This forces the CLI to store the credentials in the local config
-          echo "$MY_TOKEN" | GH_TOKEN="" gh auth login --with-token
-
-          # 2. Prepare Task Description
+          # 1. Setup the task description
           cat <<EOF > task_description.txt
           Analyze the full codebase for security vulnerabilities.
           Generate the final security report at: security-reports/security-assessment-report.md
@@ -43,16 +39,23 @@ jobs:
 
           echo "Starting Copilot Agent Task..."
 
-          # 3. Execution
-          # We set GH_TOKEN back here to ensure the agent has it for its API calls
-          if ! GH_TOKEN="$MY_TOKEN" gh agent-task create \
+          # 2. Execution with Environment Injection
+          # We provide GITHUB_TOKEN directly to the command execution
+          # and use --repo to ensure it doesn't try to look for a git remote
+          if ! GITHUB_TOKEN="$MY_TOKEN" GH_TOKEN="$MY_TOKEN" gh agent-task create \
             --repo "$GITHUB_REPOSITORY" \
             --custom-agent ".github/agents/security-reporter.agent.md" \
             --from-file task_description.txt \
             --follow 2>&1 | tee copilot_log.txt; then
             
             echo "❌ AGENT TASK FAILED"
-            cat copilot_log.txt
+            # If it still says OAuth, we will dump the help to find the 'headless' flag
+            if grep -q "OAuth token" copilot_log.txt; then
+              echo "CLI still requesting OAuth. Checking available flags..."
+              gh agent-task create --help
+            else
+              cat copilot_log.txt
+            fi
             exit 1
           fi
           
