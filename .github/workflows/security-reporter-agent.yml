@@ -25,34 +25,39 @@ jobs:
 
       - name: Run Security Agent Task
         env:
-          # Map the secret to all three common names to ensure the CLI catches it
           GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Prepare Task
+          # 1. Force-inject the token into the GH CLI config directory
+          # This bypasses the 'gh auth login' interactive requirement
+          mkdir -p ~/.config/gh
+          echo "github.com:" > ~/.config/gh/hosts.yml
+          echo "    oauth_token: $GH_TOKEN" >> ~/.config/gh/hosts.yml
+          echo "    user: x-access-token" >> ~/.config/gh/hosts.yml
+          
+          # Set correct permissions for the config file
+          chmod 600 ~/.config/gh/hosts.yml
+
+          # 2. Prepare Task
           cat <<EOF > task_description.txt
           Analyze the full codebase for security vulnerabilities.
           Generate the final security report at: security-reports/security-assessment-report.md
           EOF
 
-          # 2. Critical Step: Bypass the "gh auth login" requirement
-          # This tells the CLI to use the token in the environment without seeking a browser
-          gh auth setup-git
-
           echo "Starting Copilot Agent Task..."
 
           # 3. Execution
+          # Note: We use --repo to be explicit since we aren't in a TTY
           if ! gh agent-task create \
+            --repo "$GITHUB_REPOSITORY" \
             --custom-agent ".github/agents/security-reporter.agent.md" \
             --from-file task_description.txt \
             --follow 2>&1 | tee copilot_log.txt; then
             
             echo "❌ AGENT TASK FAILED"
-            # If the log says "OAuth token required", the token might lack 'repo' scope
             cat copilot_log.txt
             exit 1
           fi
