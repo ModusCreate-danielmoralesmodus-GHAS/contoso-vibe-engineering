@@ -52,8 +52,7 @@ jobs:
           echo "Starting Copilot Security Analysis..."
           copilot -p "$FULL_PROMPT" \
             --allow-all-tools \
-            --allow-all-paths \
-            --non-interactive 2>&1 | tee copilot_log.txt
+            --allow-all-paths  2>&1 | tee copilot_log.txt
             
             echo "❌ COPILOT EXECUTION FAILED"
             echo "--- START OF LOG ---"
