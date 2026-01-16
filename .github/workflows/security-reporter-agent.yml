@@ -25,7 +25,6 @@ jobs:
 
       - name: Run Security Agent via Copilot CLI
         env:
-          # In 2026, the CLI prioritizes GH_TOKEN or GITHUB_TOKEN
           GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -34,23 +33,24 @@ jobs:
           mkdir -p security-reports
 
           # 1. Clean the prompt (Remove Frontmatter)
+          # This extracts text AFTER the second '---'
           CLEAN_PROMPT=$(sed -n '/^---$/ { :a; n; /^---$/! ba; n; }; p' .github/agents/security-reporter.agent.md)
 
-          # 2. Save the full prompt to a file to avoid ARG_MAX issues
-          cat <<EOF > prompt.txt
+          # 2. Save using a QUOTED heredoc (<<'EOF')
+          # This prevents Bash from trying to evaluate $ or ` inside the prompt
+          cat <<'EOF' > prompt_body.txt
           $CLEAN_PROMPT
-
-          Context:
-          - Repository: $GITHUB_REPOSITORY
-
-          Task:
-          - Execute instructions on the full codebase
-          - Generate the security report at security-reports/security-assessment-report.md
           EOF
 
-          # 3. Use the --non-interactive flag and pass prompt from file
-          # We use "copilot -p" to run a one-off programmatic session
-          copilot -p "$(cat prompt.txt)" \
+          # 3. Construct the final prompt file with environment variables
+          echo "Context: - Repository: $GITHUB_REPOSITORY" > prompt.txt
+          echo "Task: - Execute instructions on the full codebase" >> prompt.txt
+          echo "- Generate the security report at security-reports/security-assessment-report.md" >> prompt.txt
+          cat prompt_body.txt >> prompt.txt
+
+          # 4. Use the CLI with a direct file input if possible, or cat it correctly
+          # 2>&1 | tee ensures we see the log even if it fails
+          copilot chat -f prompt.txt \
             --allow-all-tools \
             --allow-all-paths 2>&1 | tee copilot_log.txt
       - name: Output security report as summary
