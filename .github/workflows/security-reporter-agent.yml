@@ -25,32 +25,34 @@ jobs:
 
       - name: Run Security Agent Task
         env:
+          # Map the secret to all three common names to ensure the CLI catches it
           GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Prepare the Task Description
-          # Since the agent logic is in the .agent.md file, the 'task' 
-          # just needs to tell the agent what to do right now.
+          # 1. Prepare Task
           cat <<EOF > task_description.txt
           Analyze the full codebase for security vulnerabilities.
           Generate the final security report at: security-reports/security-assessment-report.md
           EOF
 
+          # 2. Critical Step: Bypass the "gh auth login" requirement
+          # This tells the CLI to use the token in the environment without seeking a browser
+          gh auth setup-git
+
           echo "Starting Copilot Agent Task..."
 
-          # 2. Use the correct flags discovered from your CLI help output:
-          # --custom-agent: Points to your .agent.md file
-          # --from-file (-F): Reads the specific task from our text file
-          # --follow: This ensures the logs stream so the action doesn't time out
+          # 3. Execution
           if ! gh agent-task create \
             --custom-agent ".github/agents/security-reporter.agent.md" \
             --from-file task_description.txt \
-            --follow > copilot_log.txt 2>&1; then
+            --follow 2>&1 | tee copilot_log.txt; then
             
             echo "❌ AGENT TASK FAILED"
+            # If the log says "OAuth token required", the token might lack 'repo' scope
             cat copilot_log.txt
             exit 1
           fi
