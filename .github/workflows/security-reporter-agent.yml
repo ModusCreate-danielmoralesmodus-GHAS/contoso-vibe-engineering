@@ -27,14 +27,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
+
           # 1. Extract body content after the second '---' delimiter
-          PROMPT_BODY=$(awk '/^---$/{count++; next} count==2' .github/agents/security-reporter.agent.md)
+          # Added ,0 to ensure it reads until the end of the file
+          PROMPT_BODY=$(awk '/^---$/{count++; next} count==2,0' .github/agents/security-reporter.agent.md)
 
           # 2. Construct the full prompt string safely
-          # We use a variable to avoid shell expansion issues with backticks/special chars
+          # We use a variable to avoid shell expansion issues
           FULL_PROMPT=$(cat <<EOF
           $PROMPT_BODY
 
@@ -47,12 +50,14 @@ jobs:
           EOF
           )
 
-          # 3. Execute with strict -p syntax and double-quoting the prompt variable
-          # This avoids the "Invalid command format" error
+          # 3. Execute with -p and --non-interactive
           echo "Starting Copilot Security Analysis..."
-          copilot -p "$FULL_PROMPT" \
+          
+          # We use an 'if' statement to catch the failure and print the log
+          if ! copilot -p "$FULL_PROMPT" \
             --allow-all-tools \
-            --allow-all-paths  2>&1 | tee copilot_log.txt
+            --allow-all-paths \
+            --non-interactive 2>&1 | tee copilot_log.txt; then
             
             echo "❌ COPILOT EXECUTION FAILED"
             echo "--- START OF LOG ---"
@@ -60,6 +65,8 @@ jobs:
             echo "--- END OF LOG ---"
             exit 1
           fi
+          
+          echo "✅ Copilot finished successfully."
       - name: Output security report as summary
         if: always()
         run: |
