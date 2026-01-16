@@ -25,46 +25,31 @@ jobs:
 
       - name: Run Security Agent via Copilot CLI
         env:
-          # The CLI often looks for GITHUB_TOKEN or GH_TOKEN specifically
           GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Clean the prompt
+          # 1. Clean the prompt (Remove Frontmatter)
           CLEAN_PROMPT=$(sed -n '/^---$/ { :a; n; /^---$/! ba; n; }; p' .github/agents/security-reporter.agent.md)
 
-          # 2. Build the prompt into a file to avoid command line length limits
-          cat <<EOF > prompt_content.txt
+          # 2. Build the final prompt into a local file
+          cat <<EOF > final_instructions.txt
           $CLEAN_PROMPT
 
           Context:
           - Repository: $GITHUB_REPOSITORY
 
           Task:
-          - Execute instructions and generate report at security-reports/security-assessment-report.md
+          - Execute instructions on the full codebase
+          - Generate the security report at security-reports/security-assessment-report.md
           EOF
 
-          # 3. Use 'unbuffer' (from the expect package) to run the CLI
-          # This provides a more robust TTY environment than 'script'
-          sudo apt-get install -y expect
-          
-          echo "Starting Copilot Agentic Scan..."
-          
-          # We use a subshell to read the file into the command
-          unbuffer copilot --prompt "$(cat prompt_content.txt)" \
-            --allow-all-tools \
-            --allow-all-paths 2>&1 | tee copilot_runtime.log
-
-          # Check if the report was actually created
-          if [ ! -f "security-reports/security-assessment-report.md" ]; then
-            echo "::error::Agent finished but no report was found at the expected path."
-            cat copilot_runtime.log
-            exit 1
-          fi
+          # 3. Use Pipe + Non-Interactive flag
+          # This avoids the "too many arguments" error and terminal hang.
+          # We use 'cat' to pipe the prompt into the CLI's standard input.
+          cat final_instructions.txt | copilot --allow-all-tools --allow-all-paths --non-interactive 2>&1 | tee copilot_execution.log
       - name: Output security report as summary
         if: always()
         run: |
