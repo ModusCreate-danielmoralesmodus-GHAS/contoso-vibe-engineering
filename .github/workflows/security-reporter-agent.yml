@@ -30,19 +30,30 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p security-reports
+          # 1. Extract body content after the second '---' delimiter
+          PROMPT_BODY=$(awk '/^---$/{count++; next} count==2' .github/agents/security-reporter.agent.md)
 
-          # 1. Extraction Logic
-          # Use a more resilient extraction that doesn't rely on complex sed labels
-          awk '/^---$/{count++; next} count==2' .github/agents/security-reporter.agent.md > instructions.txt
+          # 2. Construct the full prompt string safely
+          # We use a variable to avoid shell expansion issues with backticks/special chars
+          FULL_PROMPT=$(cat <<EOF
+          $PROMPT_BODY
 
-          # 2. Append Context
-          echo -e "\nContext: - Repository: ${{ github.repository }}\nTask: Execute instructions and save to security-reports/security-assessment-report.md" >> instructions.txt
+          Context:
+          - Repository: $GITHUB_REPOSITORY
 
-          # 3. Execution via Piping (Standard for 2026 CLI)
-          # We use "copilot chat" which is the modern entry point for agentic tasks
-          if ! cat instructions.txt | copilot chat \
+          Task:
+          - Execute instructions on the full codebase
+          - Generate the security report at security-reports/security-assessment-report.md
+          EOF
+          )
+
+          # 3. Execute with strict -p syntax and double-quoting the prompt variable
+          # This avoids the "Invalid command format" error
+          echo "Starting Copilot Security Analysis..."
+          copilot -p "$FULL_PROMPT" \
             --allow-all-tools \
-            --allow-all-paths > copilot_log.txt 2>&1; then
+            --allow-all-paths \
+            --non-interactive 2>&1 | tee copilot_log.txt
             
             echo "❌ COPILOT EXECUTION FAILED"
             echo "--- START OF LOG ---"
