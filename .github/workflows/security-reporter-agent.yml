@@ -35,9 +35,8 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Log in properly. Unsetting GH_TOKEN for this line is mandatory
-          # so the CLI doesn't ignore the login command.
-          echo "$MY_TOKEN" | GH_TOKEN="" gh auth login --with-token --hostname github.com
+          # 1. Export token for gh CLI
+          export GH_TOKEN="$MY_TOKEN"
 
           # 2. Prepare Task Description
           cat <<EOF > task_description.txt
@@ -47,22 +46,20 @@ jobs:
 
           echo "Starting Copilot Agent Task..."
 
-          # 3. Execution using the discovered flags
-          # We use --custom-agent with the FULL path
-          # We use -F to pass our description
-          # We use --follow to stream the execution
+          # 3. Execute agent task
           if ! gh agent-task create \
             --repo "$GITHUB_REPOSITORY" \
             --custom-agent ".github/agents/security-reporter.agent.md" \
             -F task_description.txt \
             --follow 2>&1 | tee copilot_log.txt; then
-            
+
             echo "❌ AGENT TASK FAILED"
             cat copilot_log.txt
             exit 1
           fi
-          
-          echo "✅ Analysis complete."
+
+            echo "✅ Analysis complete."
+
       - name: Output security report as summary
         if: always()
         run: |
