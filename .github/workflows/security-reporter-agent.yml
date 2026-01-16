@@ -25,17 +25,18 @@ jobs:
 
       - name: Run Security Agent via Copilot CLI
         env:
-          GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          # Use GITHUB_TOKEN or a PAT with copilot permissions
+          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Clean extraction of the body
+          # 1. Clean extraction
           PROMPT_BODY=$(awk '/^---$/{count++; next} count>=2' .github/agents/security-reporter.agent.md)
 
-          # 2. Export the full prompt to a variable to protect it from shell word-splitting
-          export FINAL_PROMPT=$(cat <<EOF
+          # 2. Build the prompt file
+          cat <<EOF > full_prompt.txt
           $PROMPT_BODY
 
           Context:
@@ -45,25 +46,15 @@ jobs:
           - Execute instructions on the full codebase
           - Generate the security report at security-reports/security-assessment-report.md
           EOF
-          )
 
           echo "Starting Copilot Security Analysis..."
 
-          # 3. Execution using the -p flag only
-          # We remove the pipe and use double quotes around the variable.
-          # We add --allow-all-tools which is the standard 2026 permission flag.
-          if ! copilot -p "$FINAL_PROMPT" \
-            --allow-all-tools \
-            --allow-all-paths 2>&1 | tee copilot_log.txt; then
-            
+          # 3. Use the GH extension syntax
+          # In version 0.0.x, we use 'gh copilot' and redirection.
+          # We use 'cat' to pipe the prompt into the command.
+          if ! cat full_prompt.txt | gh copilot chat --allow-all-tools 2>&1 | tee copilot_log.txt; then
             echo "❌ COPILOT EXECUTION FAILED"
-            # If log is empty, it might be a binary path issue
-            if [ ! -s copilot_log.txt ]; then
-               echo "Binary output was empty. Checking version:"
-               copilot --version || echo "Could not determine version"
-            else
-               cat copilot_log.txt
-            fi
+            cat copilot_log.txt
             exit 1
           fi
       - name: Output security report as summary
