@@ -23,21 +23,19 @@ jobs:
       - name: Install GitHub Copilot CLI
         run: npm i -g @github/copilot
 
-      - name: Run Security Agent via GH CLI
+      - name: Run Security Agent via Copilot CLI
         env:
-          GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Install/Update the Copilot extension for GH CLI
-          gh extension install github/gh-copilot --force
-
-          # 2. Clean the prompt (Remove Frontmatter)
+          # 1. Clean the prompt (Remove Frontmatter)
           CLEAN_PROMPT=$(sed -n '/^---$/ { :a; n; /^---$/! ba; n; }; p' .github/agents/security-reporter.agent.md)
 
-          # 3. Create a combined prompt file
+          # 2. Construct the full command
+          # We use a heredoc to avoid shell character escaping issues
           cat <<EOF > full_prompt.txt
           $CLEAN_PROMPT
 
@@ -49,10 +47,10 @@ jobs:
           - Generate the security report at security-reports/security-assessment-report.md
           EOF
 
-          # 4. Execute using 'gh copilot'
-          # We use 'explain' because it accepts large text blocks and 
-          # is the most stable command for piped input in CI.
-          cat full_prompt.txt | gh copilot explain 2>&1
+          # 3. Execute using 'script' to provide a fake TTY
+          # The -e flag returns the exit code of the child process
+          # /dev/null is where the terminal 'typescript' log goes
+          script -e -c "copilot --prompt \"$(cat full_prompt.txt)\" --allow-all-tools --allow-all-paths" /dev/null
       - name: Output security report as summary
         if: always()
         run: |
