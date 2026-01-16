@@ -25,6 +25,8 @@ jobs:
 
       - name: Run Security Agent via Copilot CLI
         env:
+          # Use GH_TOKEN as it's the 2026 standard for the CLI
+          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -32,30 +34,30 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Precise extraction of the agent instructions
-          # This captures everything after the second '---' delimiter
+          # 1. Extract the instructions to a clean file
           awk '/^---$/{count++; next} count>=2' .github/agents/security-reporter.agent.md > agent_instructions.txt
 
-          # 2. Add the dynamic context
-          echo -e "\nContext: - Repository: $GITHUB_REPOSITORY" >> agent_instructions.txt
-          echo "Task: Generate the security report at security-reports/security-assessment-report.md" >> agent_instructions.txt
+          # 2. Add the dynamic context to the file (safely)
+          echo -e "\nContext:\n- Repository: $GITHUB_REPOSITORY" >> agent_instructions.txt
 
-          # 3. Execution (The 2026 "Headless" Pattern)
-          # We pass the file content into the -p flag using a subshell.
-          # The --silent flag is key for 2026 automation to prevent broken pipes.
+          # 3. Use the '@' reference to pass the file content
+          # This avoids the shell trying to interpret Markdown backticks or variables
           echo "Starting Copilot Security Analysis..."
           
-          if ! copilot -p "$(cat agent_instructions.txt)" \
+          if ! copilot --prompt "Execute instructions in @agent_instructions.txt to generate security-reports/security-assessment-report.md" \
             --allow-all-tools \
-            --silent  2>&1 | tee copilot_log.txt; then
+            --allow-all-paths  2>&1 | tee copilot_log.txt; then
             
             echo "❌ COPILOT EXECUTION FAILED"
-            # Ensure we see the log even if it's empty or failed
-            cat copilot_log.txt || echo "Log file is empty."
+            # If the log is still empty, check the auth status
+            if [ ! -s copilot_log.txt ]; then
+              echo "Error: CLI exited immediately with no output. Checking auth..."
+              copilot auth status || echo "Auth check failed."
+            else
+              cat copilot_log.txt
+            fi
             exit 1
           fi
-          
-          echo "✅ Analysis complete."
       - name: Output security report as summary
         if: always()
         run: |
