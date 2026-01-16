@@ -25,34 +25,36 @@ jobs:
 
       - name: Run Security Agent via Copilot CLI
         env:
-          # Use GH_TOKEN as it's the 2026 standard for the CLI
+          # 2026 CLI uses GH_TOKEN as the primary auth variable
           GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Extract the instructions to a clean file
-          awk '/^---$/{count++; next} count>=2' .github/agents/security-reporter.agent.md > agent_instructions.txt
+          # 1. Simplify extraction: Grab the whole file
+          # The CLI is smart enough to ignore frontmatter if we tell it to
+          cp .github/agents/security-reporter.agent.md agent_instructions.md
 
-          # 2. Add the dynamic context to the file (safely)
-          echo -e "\nContext:\n- Repository: $GITHUB_REPOSITORY" >> agent_instructions.txt
+          # 2. Add repo context to a separate metadata file
+          echo "Current Repository: ${{ github.repository }}" > context.txt
 
-          # 3. Use the '@' reference to pass the file content
-          # This avoids the shell trying to interpret Markdown backticks or variables
           echo "Starting Copilot Security Analysis..."
           
-          if ! copilot --prompt "Execute instructions in @agent_instructions.txt to generate security-reports/security-assessment-report.md" \
+          # 3. Execution using the 2026 "Programmatic Agent" flags
+          # --silent: Disables interactive progress bars (prevents broken pipes)
+          # -y: Auto-approves the agent's plan (replaces --non-interactive)
+          if ! copilot -p "Execute instructions in @agent_instructions.md using context from @context.txt. Generate report at security-reports/security-assessment-report.md" \
             --allow-all-tools \
-            --allow-all-paths  2>&1 | tee copilot_log.txt; then
+            --silent \
+            -y 2>&1 | tee copilot_log.txt; then
             
             echo "❌ COPILOT EXECUTION FAILED"
-            # If the log is still empty, check the auth status
+            # In 2026, logs are often stored in a session state if the terminal output is empty
             if [ ! -s copilot_log.txt ]; then
-              echo "Error: CLI exited immediately with no output. Checking auth..."
-              copilot auth status || echo "Auth check failed."
+              echo "Checking internal CLI logs..."
+              cat ~/.copilot/session-state/*.log || echo "No session logs found."
             else
               cat copilot_log.txt
             fi
