@@ -52,7 +52,7 @@ jobs:
           # 4. Execute using 'gh copilot'
           # We use 'explain' because it accepts large text blocks and 
           # is the most stable command for piped input in CI.
-          cat full_prompt.txt | gh copilot explain --allow-all-paths 2>&1
+          cat full_prompt.txt | gh copilot explain 2>&1
       - name: Output security report as summary
         if: always()
         run: |
