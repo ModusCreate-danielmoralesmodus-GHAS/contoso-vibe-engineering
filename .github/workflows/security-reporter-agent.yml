@@ -47,8 +47,7 @@ jobs:
           
           if ! copilot -p "$(cat agent_instructions.txt)" \
             --allow-all-tools \
-            --silent \
-            --non-interactive 2>&1 | tee copilot_log.txt; then
+            --silent  2>&1 | tee copilot_log.txt; then
             
             echo "❌ COPILOT EXECUTION FAILED"
             # Ensure we see the log even if it's empty or failed
