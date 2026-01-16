@@ -23,20 +23,19 @@ jobs:
       - name: Install GitHub Copilot CLI
         run: npm i -g @github/copilot
 
-      - name: Run Security Agent via Copilot CLI
+      - name: Run Security Agent Task
         env:
-          # Use GITHUB_TOKEN or a PAT with copilot permissions
           GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Clean extraction
-          PROMPT_BODY=$(awk '/^---$/{count++; next} count>=2' .github/agents/security-reporter.agent.md)
+          # 1. Extract the prompt body
+          PROMPT_BODY=$(awk '/^---$/{count++; next} count>=2,0' .github/agents/security-reporter.agent.md)
 
-          # 2. Build the prompt file
-          cat <<EOF > full_prompt.txt
+          # 2. Create a clean instruction file
+          cat <<EOF > agent_task.txt
           $PROMPT_BODY
 
           Context:
@@ -47,16 +46,22 @@ jobs:
           - Generate the security report at security-reports/security-assessment-report.md
           EOF
 
-          echo "Starting Copilot Security Analysis..."
+          echo "Starting Copilot Agent Task..."
 
-          # 3. Use the GH extension syntax
-          # In version 0.0.x, we use 'gh copilot' and redirection.
-          # We use 'cat' to pipe the prompt into the command.
-          if ! cat full_prompt.txt | gh copilot chat --allow-all-tools 2>&1 | tee copilot_log.txt; then
-            echo "❌ COPILOT EXECUTION FAILED"
+          # 3. Use the built-in agent-task command
+          # --input reads the prompt from the file
+          # --allow-all gives permission for SAST tools
+          if ! gh agent-task run \
+            --input agent_task.txt \
+            --allow-all \
+            --non-interactive > copilot_log.txt 2>&1; then
+            
+            echo "❌ AGENT TASK FAILED"
             cat copilot_log.txt
             exit 1
           fi
+          
+          echo "✅ Analysis complete."
       - name: Output security report as summary
         if: always()
         run: |
