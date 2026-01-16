@@ -52,9 +52,7 @@ jobs:
           # We use "copilot -p" to run a one-off programmatic session
           copilot -p "$(cat prompt.txt)" \
             --allow-all-tools \
-            --allow-all-paths \
-            --non-interactive \
-            2>&1 | tee copilot_log.txt
+            --allow-all-paths 2>&1 | tee copilot_log.txt
       - name: Output security report as summary
         if: always()
         run: |
