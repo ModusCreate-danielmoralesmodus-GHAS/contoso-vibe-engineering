@@ -31,11 +31,13 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Extract the prompt body
+          # 1. Extract instructions (body only)
+          # awk '/^---$/{count++; next} count>=2,0' is the most reliable for markdown
           PROMPT_BODY=$(awk '/^---$/{count++; next} count>=2,0' .github/agents/security-reporter.agent.md)
 
-          # 2. Create a clean instruction file
-          cat <<EOF > agent_task.txt
+          # 2. Build the full instruction set
+          # We use a file to avoid the "Invalid command format" shell error
+          cat <<EOF > agent_instructions.md
           $PROMPT_BODY
 
           Context:
@@ -48,13 +50,14 @@ jobs:
 
           echo "Starting Copilot Agent Task..."
 
-          # 3. Use the built-in agent-task command
-          # --input reads the prompt from the file
-          # --allow-all gives permission for SAST tools
-          if ! gh agent-task run \
-            --input agent_task.txt \
+          # 3. Use 'create' with the --file flag
+          # In 2026, 'create' is the standard way to submit a prompt file to the agent
+          # --wait-for-completion ensures the workflow stays active until the report is ready
+          # --allow-all provides the SAST permissions
+          if ! gh agent-task create \
+            --file agent_instructions.md \
             --allow-all \
-            --non-interactive > copilot_log.txt 2>&1; then
+            --wait-for-completion > copilot_log.txt 2>&1; then
             
             echo "❌ AGENT TASK FAILED"
             cat copilot_log.txt
