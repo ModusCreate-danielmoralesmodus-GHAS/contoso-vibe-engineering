@@ -25,6 +25,9 @@ jobs:
 
       - name: Run Security Agent via Copilot CLI
         env:
+          # The CLI often looks for GITHUB_TOKEN or GH_TOKEN specifically
+          GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
@@ -34,29 +37,35 @@ jobs:
           # 1. Clean the prompt
           CLEAN_PROMPT=$(sed -n '/^---$/ { :a; n; /^---$/! ba; n; }; p' .github/agents/security-reporter.agent.md)
 
-          # 2. Build the final prompt string
-          export FINAL_PROMPT=$(cat <<EOF
+          # 2. Build the prompt into a file to avoid command line length limits
+          cat <<EOF > prompt_content.txt
           $CLEAN_PROMPT
 
           Context:
           - Repository: $GITHUB_REPOSITORY
 
           Task:
-          - Execute the instructions on the full codebase
-          - Generate the security report at security-reports/security-assessment-report.md
+          - Execute instructions and generate report at security-reports/security-assessment-report.md
           EOF
-          )
 
-          # 3. Execute and capture logs to 'copilot_output.log' instead of /dev/null
-          # We use -q (quiet) for script but keep the output file for debugging
-          echo "Starting Copilot Agent..."
-          script -e -q -c "copilot --prompt \"\$FINAL_PROMPT\" --allow-all-tools --allow-all-paths" copilot_output.log || {
-            echo "::error::Copilot Execution Failed. See details below:"
-            cat copilot_output.log
-            exit 1
-          }
+          # 3. Use 'unbuffer' (from the expect package) to run the CLI
+          # This provides a more robust TTY environment than 'script'
+          sudo apt-get install -y expect
           
-          echo "Copilot finished successfully."
+          echo "Starting Copilot Agentic Scan..."
+          
+          # We use a subshell to read the file into the command
+          unbuffer copilot --prompt "$(cat prompt_content.txt)" \
+            --allow-all-tools \
+            --allow-all-paths \
+            --non-interactive 2>&1 | tee copilot_runtime.log
+
+          # Check if the report was actually created
+          if [ ! -f "security-reports/security-assessment-report.md" ]; then
+            echo "::error::Agent finished but no report was found at the expected path."
+            cat copilot_runtime.log
+            exit 1
+          fi
       - name: Output security report as summary
         if: always()
         run: |
