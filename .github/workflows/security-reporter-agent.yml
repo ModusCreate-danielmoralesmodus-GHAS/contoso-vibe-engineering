@@ -25,41 +25,34 @@ jobs:
 
       - name: Run Security Agent via Copilot CLI
         env:
-          # 2026 CLI uses GH_TOKEN as the primary auth variable
-          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Simplify extraction: Grab the whole file
-          # The CLI is smart enough to ignore frontmatter if we tell it to
-          cp .github/agents/security-reporter.agent.md agent_instructions.md
-
-          # 2. Add repo context to a separate metadata file
-          echo "Current Repository: ${{ github.repository }}" > context.txt
+          # 1. Prepare the prompt file (Avoids shell expansion issues)
+          # We include the instructions and the task in one file
+          awk '/^---$/{count++; next} count>=2' .github/agents/security-reporter.agent.md > full_instruction.txt
+          
+          echo -e "\n\nContext:\n- Repository: ${{ github.repository }}" >> full_instruction.txt
+          echo -e "\nTask:\n- Generate the security report at security-reports/security-assessment-report.md" >> full_instruction.txt
 
           echo "Starting Copilot Security Analysis..."
-          
-          # 3. Execution using the 2026 "Programmatic Agent" flags
-          # --silent: Disables interactive progress bars (prevents broken pipes)
-          # -y: Auto-approves the agent's plan (replaces --non-interactive)
-          if ! copilot -p "Execute instructions in @agent_instructions.md using context from @context.txt. Generate report at security-reports/security-assessment-report.md" \
+
+          # 2. The "Clean Pipe" Execution
+          # We use -p and pass the content. We remove --silent and -y 
+          # which are clearly not supported by your binary.
+          # We use 'yes' to handle any "Do you want to run this tool?" prompts.
+          if ! yes | copilot -p "$(cat full_instruction.txt)" \
             --allow-all-tools \
-            --silent \
-            -y 2>&1 | tee copilot_log.txt; then
+            --allow-all-paths 2>&1 | tee copilot_log.txt; then
             
             echo "❌ COPILOT EXECUTION FAILED"
-            # In 2026, logs are often stored in a session state if the terminal output is empty
-            if [ ! -s copilot_log.txt ]; then
-              echo "Checking internal CLI logs..."
-              cat ~/.copilot/session-state/*.log || echo "No session logs found."
-            else
-              cat copilot_log.txt
-            fi
+            cat copilot_log.txt
             exit 1
           fi
+          
+          echo "✅ Analysis complete."
       - name: Output security report as summary
         if: always()
         run: |
