@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Clean the prompt (Remove Frontmatter)
+          # 1. Clean the prompt
           CLEAN_PROMPT=$(sed -n '/^---$/ { :a; n; /^---$/! ba; n; }; p' .github/agents/security-reporter.agent.md)
 
           # 2. Build the final prompt string
@@ -47,9 +47,16 @@ jobs:
           EOF
           )
 
-          # 3. Execute using 'script' with the variable
-          # We use 'env' to pass the prompt into the PTY session safely
-          script -e -c "copilot --prompt \"\$FINAL_PROMPT\" --allow-all-tools --allow-all-paths" /dev/null
+          # 3. Execute and capture logs to 'copilot_output.log' instead of /dev/null
+          # We use -q (quiet) for script but keep the output file for debugging
+          echo "Starting Copilot Agent..."
+          script -e -q -c "copilot --prompt \"\$FINAL_PROMPT\" --allow-all-tools --allow-all-paths" copilot_output.log || {
+            echo "::error::Copilot Execution Failed. See details below:"
+            cat copilot_output.log
+            exit 1
+          }
+          
+          echo "Copilot finished successfully."
       - name: Output security report as summary
         if: always()
         run: |
