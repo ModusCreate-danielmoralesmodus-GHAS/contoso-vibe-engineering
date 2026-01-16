@@ -49,7 +49,7 @@ jobs:
           # 3. Use Pipe + Non-Interactive flag
           # This avoids the "too many arguments" error and terminal hang.
           # We use 'cat' to pipe the prompt into the CLI's standard input.
-          cat final_instructions.txt | copilot --allow-all-tools --allow-all-paths --non-interactive 2>&1 | tee copilot_execution.log
+          cat final_instructions.txt | copilot --allow-all-tools --allow-all-paths 2>&1 | tee copilot_execution.log
       - name: Output security report as summary
         if: always()
         run: |
