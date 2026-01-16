@@ -30,6 +30,8 @@ jobs:
       - name: Run Security Agent Task
         env:
           MY_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.COPILOT_OAUTH_TOKEN }}
+
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
