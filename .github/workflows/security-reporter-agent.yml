@@ -32,33 +32,27 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Extract body content accurately
-          PROMPT_BODY=$(awk '/^---$/{count++; next} count>=2' .github/agents/security-reporter.agent.md)
+          # 1. Precise extraction of the agent instructions
+          # This captures everything after the second '---' delimiter
+          awk '/^---$/{count++; next} count>=2' .github/agents/security-reporter.agent.md > agent_instructions.txt
 
-          # 2. Build the full prompt into a variable
-          # We use a heredoc to preserve the structure perfectly
-          FULL_PROMPT=$(cat <<EOF
-          $PROMPT_BODY
+          # 2. Add the dynamic context
+          echo -e "\nContext: - Repository: $GITHUB_REPOSITORY" >> agent_instructions.txt
+          echo "Task: Generate the security report at security-reports/security-assessment-report.md" >> agent_instructions.txt
 
-          Context:
-          - Repository: $GITHUB_REPOSITORY
-
-          Task:
-          - Execute instructions on the full codebase
-          - Generate the security report at security-reports/security-assessment-report.md
-          EOF
-          )
-
+          # 3. Execution (The 2026 "Headless" Pattern)
+          # We pass the file content into the -p flag using a subshell.
+          # The --silent flag is key for 2026 automation to prevent broken pipes.
           echo "Starting Copilot Security Analysis..."
-
-          # 3. Use the exact flag the error message requested: --prompt
-          # We wrap the variable in DOUBLE QUOTES to ensure it's seen as one single argument
-          if ! copilot --prompt "$FULL_PROMPT" \
+          
+          if ! copilot -p "$(cat agent_instructions.txt)" \
             --allow-all-tools \
-            --allow-all-paths 2>&1 | tee copilot_log.txt; then
+            --silent \
+            --non-interactive 2>&1 | tee copilot_log.txt; then
             
             echo "❌ COPILOT EXECUTION FAILED"
-            # The log is already being printed via tee, but let's be safe
+            # Ensure we see the log even if it's empty or failed
+            cat copilot_log.txt || echo "Log file is empty."
             exit 1
           fi
           
