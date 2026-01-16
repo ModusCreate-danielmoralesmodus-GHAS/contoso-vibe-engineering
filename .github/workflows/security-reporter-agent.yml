@@ -34,9 +34,8 @@ jobs:
           # 1. Clean the prompt (Remove Frontmatter)
           CLEAN_PROMPT=$(sed -n '/^---$/ { :a; n; /^---$/! ba; n; }; p' .github/agents/security-reporter.agent.md)
 
-          # 2. Construct the full command
-          # We use a heredoc to avoid shell character escaping issues
-          cat <<EOF > full_prompt.txt
+          # 2. Build the final prompt string
+          export FINAL_PROMPT=$(cat <<EOF
           $CLEAN_PROMPT
 
           Context:
@@ -46,11 +45,11 @@ jobs:
           - Execute the instructions on the full codebase
           - Generate the security report at security-reports/security-assessment-report.md
           EOF
+          )
 
-          # 3. Execute using 'script' to provide a fake TTY
-          # The -e flag returns the exit code of the child process
-          # /dev/null is where the terminal 'typescript' log goes
-          script -e -c "copilot --prompt \"$(cat full_prompt.txt)\" --allow-all-tools --allow-all-paths" /dev/null
+          # 3. Execute using 'script' with the variable
+          # We use 'env' to pass the prompt into the PTY session safely
+          script -e -c "copilot --prompt \"\$FINAL_PROMPT\" --allow-all-tools --allow-all-paths" /dev/null
       - name: Output security report as summary
         if: always()
         run: |
