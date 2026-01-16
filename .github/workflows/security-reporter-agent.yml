@@ -32,7 +32,7 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Extract the prompt body (after the second ---)
+          # 1. Extract the prompt body correctly
           PROMPT_BODY=$(awk '/^---$/{count++; next} count==2,0' .github/agents/security-reporter.agent.md)
 
           # 2. Build the final instruction
@@ -48,13 +48,13 @@ jobs:
           EOF
           )
 
-          # 3. Execute using 'chat' subcommand with the '-y' flag
+          # 3. Use 'yes' to handle any interactive prompts and remove the subcommand 'chat'
+          # If 'copilot chat' failed, we go back to the base 'copilot' command
           echo "Starting Copilot Security Analysis..."
           
-          if ! copilot chat -p "$FULL_PROMPT" \
+          if ! yes | copilot --prompt "$FULL_PROMPT" \
             --allow-all-tools \
-            --allow-all-paths \
-            -y 2>&1 | tee copilot_log.txt; then
+            --allow-all-paths 2>&1 | tee copilot_log.txt; then
             
             echo "❌ COPILOT EXECUTION FAILED"
             echo "--- START OF LOG ---"
