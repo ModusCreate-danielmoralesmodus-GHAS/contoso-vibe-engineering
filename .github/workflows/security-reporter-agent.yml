@@ -23,19 +23,21 @@ jobs:
       - name: Install GitHub Copilot CLI
         run: npm i -g @github/copilot
 
-      - name: Run Security Agent via Copilot CLI
+      - name: Run Security Agent via GH CLI
         env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Strip the YAML frontmatter properly
-          # This sed command deletes everything from the first line to the second '---'
+          # 1. Install/Update the Copilot extension for GH CLI
+          gh extension install github/gh-copilot --force
+
+          # 2. Clean the prompt (Remove Frontmatter)
           CLEAN_PROMPT=$(sed -n '/^---$/ { :a; n; /^---$/! ba; n; }; p' .github/agents/security-reporter.agent.md)
 
-          # 2. Build the full instruction set in a temporary file to avoid shell expansion issues
+          # 3. Create a combined prompt file
           cat <<EOF > full_prompt.txt
           $CLEAN_PROMPT
 
@@ -44,16 +46,13 @@ jobs:
 
           Task:
           - Execute the instructions on the full codebase
-          - Generate the security report at security-reports/security-assessment-report.md summarizing findings, severity, and remediation guidance.
+          - Generate the security report at security-reports/security-assessment-report.md
           EOF
 
-          # 3. Use --prompt-file (if supported) or pipe the content
-          # Piping is the most compatible way to handle large prompts in CI
-          cat full_prompt.txt | copilot --allow-all-tools --allow-all-paths 2>&1 || {
-            echo "::error::Copilot failed to execute. Check logs below."
-            exit 1
-          }
-
+          # 4. Execute using 'gh copilot'
+          # We use 'explain' because it accepts large text blocks and 
+          # is the most stable command for piped input in CI.
+          cat full_prompt.txt | gh copilot explain --allow-all-tools --allow-all-paths 2>&1
       - name: Output security report as summary
         if: always()
         run: |
