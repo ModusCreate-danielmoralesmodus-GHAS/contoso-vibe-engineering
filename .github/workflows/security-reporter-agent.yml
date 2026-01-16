@@ -25,15 +25,15 @@ jobs:
 
       - name: Run Security Agent Task
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          MY_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Authenticate the CLI session properly
-          # This is the 2026 standard for non-interactive 'gh' authentication
-          echo "$GH_TOKEN" | gh auth login --with-token
+          # 1. Authenticate by piping the token and ensuring GH_TOKEN is NOT set in this specific sub-command
+          # This forces the CLI to store the credentials in the local config
+          echo "$MY_TOKEN" | GH_TOKEN="" gh auth login --with-token
 
           # 2. Prepare Task Description
           cat <<EOF > task_description.txt
@@ -44,8 +44,8 @@ jobs:
           echo "Starting Copilot Agent Task..."
 
           # 3. Execution
-          # We use --follow to stream logs and keep the session active
-          if ! gh agent-task create \
+          # We set GH_TOKEN back here to ensure the agent has it for its API calls
+          if ! GH_TOKEN="$MY_TOKEN" gh agent-task create \
             --repo "$GITHUB_REPOSITORY" \
             --custom-agent ".github/agents/security-reporter.agent.md" \
             --from-file task_description.txt \
