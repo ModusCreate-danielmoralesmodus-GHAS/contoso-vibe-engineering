@@ -23,24 +23,27 @@ jobs:
       - name: Install GitHub Copilot CLI
         run: npm i -g @github/copilot
 
-      - name: Run Security Agent via GH Copilot
+      - name: Run Security Agent via Copilot CLI
         env:
-          GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
 
-          # Ensure extension is ready
-          gh extension install github/gh-copilot --force
+          # Read the file and strip the YAML frontmatter (everything between the first two ---)
+          # This command deletes lines 1 through the second occurrence of '---'
+          CLEAN_PROMPT=$(sed '1,/---/d; 1,/---/d' .github/agents/security-reporter.agent.md)
 
-          AGENT_PROMPT=$(cat .github/agents/security-reporter.agent.md)
-          
-          # Use the 'gh copilot' command directly. 
-          # Note: The extension usually expects 'explain' or 'suggest'. 
-          # To pass a custom prompt for an agent task, we use the execute syntax:
-          
-          gh copilot explain "$AGENT_PROMPT" --allow-all-tools --allow-all-paths < /dev/null
+          # Construct the final prompt
+          PROMPT="$CLEAN_PROMPT"
+          PROMPT+=$'\n\nContext:\n- Repository: '"$GITHUB_REPOSITORY"
+          PROMPT+=$'\n\nTask:\n- Execute the instructions on the full codebase'
+          PROMPT+=$'\n- Generate the security report at security-reports/security-assessment-report.md'
+
+          # Run the CLI using the cleaned prompt
+          # Using -- to signify the end of flags and start of positional arguments if needed
+          copilot --prompt "$PROMPT" --allow-all-tools --allow-all-paths < /dev/null
 
       - name: Output security report as summary
         if: always()
