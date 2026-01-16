@@ -25,8 +25,10 @@ jobs:
 
       - name: Run Security Agent via Copilot CLI
         env:
+          # In 2026, the CLI prioritizes GH_TOKEN or GITHUB_TOKEN
           GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p security-reports
@@ -34,8 +36,8 @@ jobs:
           # 1. Clean the prompt (Remove Frontmatter)
           CLEAN_PROMPT=$(sed -n '/^---$/ { :a; n; /^---$/! ba; n; }; p' .github/agents/security-reporter.agent.md)
 
-          # 2. Build the final prompt into a local file
-          cat <<EOF > final_instructions.txt
+          # 2. Save the full prompt to a file to avoid ARG_MAX issues
+          cat <<EOF > prompt.txt
           $CLEAN_PROMPT
 
           Context:
@@ -46,10 +48,13 @@ jobs:
           - Generate the security report at security-reports/security-assessment-report.md
           EOF
 
-          # 3. Use Pipe + Non-Interactive flag
-          # This avoids the "too many arguments" error and terminal hang.
-          # We use 'cat' to pipe the prompt into the CLI's standard input.
-          cat final_instructions.txt | copilot --allow-all-tools --allow-all-paths 2>&1 | tee copilot_execution.log
+          # 3. Use the --non-interactive flag and pass prompt from file
+          # We use "copilot -p" to run a one-off programmatic session
+          copilot -p "$(cat prompt.txt)" \
+            --allow-all-tools \
+            --allow-all-paths \
+            --non-interactive \
+            2>&1 | tee copilot_log.txt
       - name: Output security report as summary
         if: always()
         run: |
