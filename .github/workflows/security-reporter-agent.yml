@@ -33,24 +33,25 @@ jobs:
           mkdir -p security-reports
 
           # 1. Clean the prompt (Remove Frontmatter)
-          # This extracts text AFTER the second '---'
           CLEAN_PROMPT=$(sed -n '/^---$/ { :a; n; /^---$/! ba; n; }; p' .github/agents/security-reporter.agent.md)
 
-          # 2. Save using a QUOTED heredoc (<<'EOF')
-          # This prevents Bash from trying to evaluate $ or ` inside the prompt
-          cat <<'EOF' > prompt_body.txt
+          # 2. Build the full prompt file
+          # We use a quoted 'EOF' to prevent Bash from mangling the markdown content
+          cat <<'EOF' > prompt.txt
           $CLEAN_PROMPT
+
+          Context:
+          - Repository: $GITHUB_REPOSITORY
+
+          Task:
+          - Execute instructions on the full codebase
+          - Generate the security report at security-reports/security-assessment-report.md
           EOF
 
-          # 3. Construct the final prompt file with environment variables
-          echo "Context: - Repository: $GITHUB_REPOSITORY" > prompt.txt
-          echo "Task: - Execute instructions on the full codebase" >> prompt.txt
-          echo "- Generate the security report at security-reports/security-assessment-report.md" >> prompt.txt
-          cat prompt_body.txt >> prompt.txt
-
-          # 4. Use the CLI with a direct file input if possible, or cat it correctly
-          # 2>&1 | tee ensures we see the log even if it fails
-          copilot chat prompt.txt \
+          # 3. Execute using standard input redirection
+          # In the 2026 CLI, the -p flag accepts the prompt string. 
+          # To pass a whole file, we pipe it or use the @ symbol.
+          copilot -p "$(cat prompt.txt)" \
             --allow-all-tools \
             --allow-all-paths 2>&1 | tee copilot_log.txt
       - name: Output security report as summary
