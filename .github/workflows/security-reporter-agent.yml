@@ -31,17 +31,11 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Force-inject the token into the GH CLI config directory
-          # This bypasses the 'gh auth login' interactive requirement
-          mkdir -p ~/.config/gh
-          echo "github.com:" > ~/.config/gh/hosts.yml
-          echo "    oauth_token: $GH_TOKEN" >> ~/.config/gh/hosts.yml
-          echo "    user: x-access-token" >> ~/.config/gh/hosts.yml
-          
-          # Set correct permissions for the config file
-          chmod 600 ~/.config/gh/hosts.yml
+          # 1. Authenticate the CLI session properly
+          # This is the 2026 standard for non-interactive 'gh' authentication
+          echo "$GH_TOKEN" | gh auth login --with-token
 
-          # 2. Prepare Task
+          # 2. Prepare Task Description
           cat <<EOF > task_description.txt
           Analyze the full codebase for security vulnerabilities.
           Generate the final security report at: security-reports/security-assessment-report.md
@@ -50,7 +44,7 @@ jobs:
           echo "Starting Copilot Agent Task..."
 
           # 3. Execution
-          # Note: We use --repo to be explicit since we aren't in a TTY
+          # We use --follow to stream logs and keep the session active
           if ! gh agent-task create \
             --repo "$GITHUB_REPOSITORY" \
             --custom-agent ".github/agents/security-reporter.agent.md" \
