@@ -32,11 +32,12 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Extract the prompt body correctly
-          PROMPT_BODY=$(awk '/^---$/{count++; next} count==2,0' .github/agents/security-reporter.agent.md)
+          # 1. Improved Extraction: Captures everything from the 2nd '---' to EOF
+          PROMPT_BODY=$(awk '/^---$/{count++; next} count>=2' .github/agents/security-reporter.agent.md)
 
           # 2. Build the final instruction
-          FULL_PROMPT=$(cat <<EOF
+          # Using a temporary file is safer than a shell variable for very large prompts
+          cat <<EOF > final_prompt.txt
           $PROMPT_BODY
 
           Context:
@@ -46,24 +47,17 @@ jobs:
           - Execute instructions on the full codebase
           - Generate the security report at security-reports/security-assessment-report.md
           EOF
-          )
 
-          # 3. Use 'yes' to handle any interactive prompts and remove the subcommand 'chat'
-          # If 'copilot chat' failed, we go back to the base 'copilot' command
           echo "Starting Copilot Security Analysis..."
           
-          if ! yes | copilot --prompt "$FULL_PROMPT" \
-            --allow-all-tools \
-            --allow-all-paths 2>&1 | tee copilot_log.txt; then
-            
+          # 3. Use the absolute simplest execution path
+          # We use 'copilot chat' and pipe the file in. 
+          # This bypasses flag-parsing issues for the prompt string itself.
+          if ! copilot chat --allow-all-tools < final_prompt.txt 2>&1 | tee copilot_log.txt; then
             echo "❌ COPILOT EXECUTION FAILED"
-            echo "--- START OF LOG ---"
             cat copilot_log.txt
-            echo "--- END OF LOG ---"
             exit 1
           fi
-          
-          echo "✅ Analysis complete."
       - name: Output security report as summary
         if: always()
         run: |
