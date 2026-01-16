@@ -31,33 +31,24 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Extract instructions (body only)
-          # awk '/^---$/{count++; next} count>=2,0' is the most reliable for markdown
-          PROMPT_BODY=$(awk '/^---$/{count++; next} count>=2,0' .github/agents/security-reporter.agent.md)
-
-          # 2. Build the full instruction set
-          # We use a file to avoid the "Invalid command format" shell error
-          cat <<EOF > agent_instructions.md
-          $PROMPT_BODY
-
-          Context:
-          - Repository: $GITHUB_REPOSITORY
-
-          Task:
-          - Execute instructions on the full codebase
-          - Generate the security report at security-reports/security-assessment-report.md
+          # 1. Prepare the Task Description
+          # Since the agent logic is in the .agent.md file, the 'task' 
+          # just needs to tell the agent what to do right now.
+          cat <<EOF > task_description.txt
+          Analyze the full codebase for security vulnerabilities.
+          Generate the final security report at: security-reports/security-assessment-report.md
           EOF
 
           echo "Starting Copilot Agent Task..."
 
-          # 3. Use 'create' with the --file flag
-          # In 2026, 'create' is the standard way to submit a prompt file to the agent
-          # --wait-for-completion ensures the workflow stays active until the report is ready
-          # --allow-all provides the SAST permissions
+          # 2. Use the correct flags discovered from your CLI help output:
+          # --custom-agent: Points to your .agent.md file
+          # --from-file (-F): Reads the specific task from our text file
+          # --follow: This ensures the logs stream so the action doesn't time out
           if ! gh agent-task create \
-            --file agent_instructions.md \
-            --allow-all \
-            --wait-for-completion > copilot_log.txt 2>&1; then
+            --custom-agent ".github/agents/security-reporter.agent.md" \
+            --from-file task_description.txt \
+            --follow > copilot_log.txt 2>&1; then
             
             echo "❌ AGENT TASK FAILED"
             cat copilot_log.txt
