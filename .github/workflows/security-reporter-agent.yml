@@ -32,12 +32,10 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports
 
-          # 1. Extract body content after the second '---' delimiter
-          # Added ,0 to ensure it reads until the end of the file
+          # 1. Extract the prompt body (after the second ---)
           PROMPT_BODY=$(awk '/^---$/{count++; next} count==2,0' .github/agents/security-reporter.agent.md)
 
-          # 2. Construct the full prompt string safely
-          # We use a variable to avoid shell expansion issues
+          # 2. Build the final instruction
           FULL_PROMPT=$(cat <<EOF
           $PROMPT_BODY
 
@@ -50,14 +48,13 @@ jobs:
           EOF
           )
 
-          # 3. Execute with -p and --non-interactive
+          # 3. Execute using 'chat' subcommand with the '-y' flag
           echo "Starting Copilot Security Analysis..."
           
-          # We use an 'if' statement to catch the failure and print the log
-          if ! copilot -p "$FULL_PROMPT" \
+          if ! copilot chat -p "$FULL_PROMPT" \
             --allow-all-tools \
             --allow-all-paths \
-            --non-interactive 2>&1 | tee copilot_log.txt; then
+            -y 2>&1 | tee copilot_log.txt; then
             
             echo "❌ COPILOT EXECUTION FAILED"
             echo "--- START OF LOG ---"
@@ -66,7 +63,7 @@ jobs:
             exit 1
           fi
           
-          echo "✅ Copilot finished successfully."
+          echo "✅ Analysis complete."
       - name: Output security report as summary
         if: always()
         run: |
