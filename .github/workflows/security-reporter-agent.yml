@@ -57,8 +57,7 @@ jobs:
           # We use a subshell to read the file into the command
           unbuffer copilot --prompt "$(cat prompt_content.txt)" \
             --allow-all-tools \
-            --allow-all-paths \
-            --non-interactive 2>&1 | tee copilot_runtime.log
+            --allow-all-paths 2>&1 | tee copilot_runtime.log
 
           # Check if the report was actually created
           if [ ! -f "security-reports/security-assessment-report.md" ]; then
